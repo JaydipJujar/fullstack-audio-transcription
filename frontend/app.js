@@ -1,3 +1,6 @@
+let socket;
+const transcriptEl = document.getElementById("transcript");
+
 const canvas = document.getElementById("visualizer");
 const ctx = canvas.getContext("2d");
 canvas.width = 400;
@@ -10,6 +13,21 @@ let analyser;
 let dataArray;
 
 startBtn.onclick = async () => {
+
+  socket = new WebSocket("ws://localhost:8080/ws/audio");
+
+  socket.onopen = () => {
+    console.log("WebSocket connected");
+  };
+
+  socket.onmessage = (event) => {
+    transcriptEl.innerText = event.data;
+  };
+
+  socket.onerror = (err) => {
+    console.error("WebSocket error", err);
+  };
+
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
   audioCtx = new AudioContext();
@@ -21,8 +39,10 @@ startBtn.onclick = async () => {
   dataArray = new Uint8Array(analyser.frequencyBinCount);
   source.connect(analyser);
 
+  startSendingAudio(stream);
   draw();
 };
+
 
 function draw() {
   requestAnimationFrame(draw);
@@ -52,4 +72,21 @@ function draw() {
     ctx.lineTo(x2, y2);
     ctx.stroke();
   }
+}
+function startSendingAudio(stream) {
+  const audioContext = new AudioContext();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+
+  processor.onaudioprocess = (e) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      const audioData = e.inputBuffer.getChannelData(0);
+
+      // Convert Float32Array to simple string (mock)
+      socket.send(audioData.slice(0, 100).toString());
+    }
+  };
 }
